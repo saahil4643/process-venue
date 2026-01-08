@@ -83,8 +83,9 @@ class ProjectListView(APIView):
     """
     Project list endpoint with optional skill filtering.
     
-    GET /api/projects              -> List all projects
-    GET /api/projects?skill=Python -> List projects with "Python" skill
+    GET  /api/projects              -> List all projects
+    GET  /api/projects?skill=Python -> List projects with "Python" skill
+    POST /api/projects              -> Create a new project
     """
     
     def get(self, request):
@@ -102,6 +103,28 @@ class ProjectListView(APIView):
         serializer = ProjectSerializer(projects, many=True)
         return Response(serializer.data)
 
+    def post(self, request):
+        """
+        Create a new project.
+        
+        Expected JSON body:
+        {
+            "title": "Project Title",
+            "description": "Project description",
+            "links": {"github": "https://github.com/...", "live": "https://..."},
+            "skill_names": ["Python", "Django", "React"]
+        }
+        """
+        serializer = ProjectSerializer(data=request.data)
+        if serializer.is_valid():
+            project = serializer.save()
+            # Automatically add project to profile if profile exists
+            profile = Profile.objects.first()
+            if profile:
+                profile.projects.add(project)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class TopSkillsView(APIView):
     """
@@ -118,6 +141,44 @@ class TopSkillsView(APIView):
         
         serializer = SkillWithCountSerializer(skills, many=True)
         return Response(serializer.data)
+
+
+class SkillListView(APIView):
+    """
+    Skills endpoint.
+    
+    GET  /api/skills       -> List all skills
+    POST /api/skills       -> Create a new skill
+    """
+    
+    def get(self, request):
+        """List all skills."""
+        skills = Skill.objects.all()
+        return Response([{"id": s.id, "name": s.name} for s in skills])
+
+    def post(self, request):
+        """
+        Create a new skill.
+        
+        Expected JSON body:
+        {
+            "name": "Skill Name"
+        }
+        """
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response(
+                {"detail": "Skill name is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        skill, created = Skill.objects.get_or_create(name=name)
+        if not created:
+            return Response(
+                {"detail": f"Skill '{name}' already exists.", "id": skill.id, "name": skill.name},
+                status=status.HTTP_200_OK
+            )
+        return Response({"id": skill.id, "name": skill.name}, status=status.HTTP_201_CREATED)
 
 
 class SearchView(APIView):
